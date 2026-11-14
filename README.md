@@ -11,7 +11,7 @@ N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿�
 
 [![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![model](https://img.shields.io/badge/实测-DeepSeek_V4.1--Flash__1017-4F46E5)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/)
 
-**无限一代至四代原作者维护创建 · 开源公益 · 仅供研究使用 · 非商业**
+**无限一代至四代原作者维护创建 · 开源公益 · 仅供模型边界和研究使用 · 非商业**
 
 </div>
 
