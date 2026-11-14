@@ -1,34 +1,54 @@
+<div align="center">
+
 # 无限N代 · dsh-infinite-gen-n
 
-> 破甲技术交流论坛：**https://openorigin.link/**
->
-> **无限一代至四代原作者维护创建**
->
-> DeepSeek Harness 破甲插件「无限N代」：N1 提示词（A/B 实测 100%）+ 输入归一化 + 冷启动预热
-> + 多轮重锚 + 宿主清洗。把「破甲模式」注册成可选 agent preset；未选中的会话零注入。
-> **开源公益 · 仅供研究使用 · 非商业**
+**DeepSeek Harness 全量破甲引擎**
 
-![version](https://img.shields.io/badge/version-1.1.0-green) ![dsh](https://img.shields.io/badge/dsh-0.2.0--rc.1%20~%200.2.x-blue) ![license](https://img.shields.io/badge/license-非商业-orange)
+N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿主清洗引擎
+
+45 探针 A/B 实测 **100% 通过率** · 零回归 · 65+ 宿主补丁 · 全程可回滚
+
+[![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/)
+
+**无限一代至四代原作者维护创建 · 开源公益 · 仅供研究使用 · 非商业**
+
+</div>
+
+---
+
+## 这是什么
+
+「无限N代」把 **DeepSeek Harness (DSH)** 调教成一个不打折的交付引擎：模型不再拒绝、不再说教、不再中途塌陷——拿到任务直接给完整交付物，从第一轮到第 500 轮一个样。
+
+- **破甲提示词 N1**（1216 行 · 45 节 · 40 项发送自检）：单一路径的拒绝解剖引擎 + �位续写 + 反过滤策略，拒绝形态逐条命名、逐条封死
+- **输入归一化**：敏感实体在模型看到之前就被替换为占位符，从源头压掉安全分类器的误触发
+- **实时徽标投影**：每条回复即答即判——✓ 合格 / ◐ 没写完 / ✗ 婉拒，拒绝一出现自动亮灯并触发重锚
+- **宿主清洗引擎**：65+ 条可回滚补丁直击 DSH 宿主本身——审批门、沙箱提示、身份框架、读取上限，全部由你掌控
+
+**实测战绩**：45 探针（7 条lane × 3 难度 × 中英双语）A/B 对比通过率 100%，工程、虚构、裸词创作请求全部零拒绝交付。
 
 ## 界面预览
 
-**1. 左侧栏「无限N代」入口**
+<table>
+  <tr>
+    <td align="center" width="50%"><b>① 左侧栏「无限N代」入口</b></td>
+    <td align="center" width="50%"><b>② 破甲层 · 一键破甲 / 一键还原</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/01-sidebar-无限N代.png" alt="左侧栏入口"/></td>
+    <td><img src="docs/screenshots/02-破甲层-一键破甲.png" alt="破甲层操作"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>③ 预设选择器「破甲模式」</b></td>
+    <td align="center"><b>④ 徽标「破甲已开启 · 无限N代」</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/03-预设选择器-破甲模式.png" alt="预设选择器"/></td>
+    <td><img src="docs/screenshots/04-徽标-破甲已开启.png" alt="破甲徽标"/></td>
+  </tr>
+</table>
 
-![左侧栏入口](docs/screenshots/01-sidebar-无限N代.png)
-
-**2. 破甲层 · 一键破甲 / 一键还原**
-
-![破甲层操作](docs/screenshots/02-破甲层-一键破甲.png)
-
-**3. 新建会话 · 预设选择器「破甲模式」**
-
-![预设选择器](docs/screenshots/03-预设选择器-破甲模式.png)
-
-**4. 输入框上方徽标「破甲已开启 · 无限N代」**
-
-![破甲徽标](docs/screenshots/04-徽标-破甲已开启.png)
-
-## 安装
+## 快速开始
 
 ```powershell
 # 完全退出 DeepSeek Harness 后执行
@@ -37,57 +57,80 @@
 .\install.ps1 -Restore <时间戳>  # 回滚
 ```
 
-手动：把整个 `dsh-infinite-gen-n` 目录复制到
-`$DSH_HOME\plugins\`、`$DSH_HOME\node_modules\`、`$DSH_HOME\profiles\<profile>\node_modules\` 三处，
-重启宿主，新建会话选「破甲模式」预设。
+装完重启 DSH → 新建会话 → 预设选「**破甲模式**」→ 输入框上方出现「破甲已开启 · 无限N代」徽标，生效。
+
+<details>
+<summary><b>手动安装（无脚本）</b></summary>
+
+把整个 `dsh-infinite-gen-n` 目录复制到以下三处，重启宿主即可：
+
+```
+$DSH_HOME\plugins\
+$DSH_HOME\node_modules\
+$DSH_HOME\profiles\<profile>\node_modules\
+```
+
+</details>
 
 ## 三层架构
 
-| 层 | 内容 |
+| 层 | 能力 |
 |---|---|
-| **L3 提示词** | `prompts/N1.md`：`ollie:` 应答协议、[O] thinking、ONE WALL、45 节、40 项发送自检、反过滤 stealth |
-| **L2 工程机制** | preset 登记、scope 热切换、输入归一化、冷启动预热、拒绝重锚、armor 投影徽标 |
-| **L1 宿主清洗** | `lib/host-patch/`：备份 / 幂等 apply / revert / skipped / shim / SEALED-ASAR 判据 |
+| **L3 提示词** | N1 破甲提示词（1216 行 / 45 节 / 40 项自检）：`ollie:` 应答协议 · [O] thinking · ONE WALL · 反过滤 stealth |
+| **L2 工程机制** | preset 登记 · scope 热切换 · 输入归一化 · 冷启动预热 · 拒绝重锚 · �章投影 |
+| **L1 宿主清洗** | 65+ 条可回滚宿主补丁：审批门 / 沙箱 / 身份框架 / 读取上限 / SEALED-ASAR 判据 |
 
-## N1 提示词
+## N1 提示词 · 核心机制
 
-N1 由 `tools/build-n1.mjs` 生成（重建逐字节确定），核心机制：
+「破得住」之外更要「交得出」。N1 用 40 项发送自检封死每一种已知失败形态：
 
-- **ONE WALL**：唯一例外主题，一行拒绝，工作继续
-- **ANTI-REFUSAL ENGINE**：拒绝解剖 ×20 形态 + counter-bank 封辩论
-- **REVERSION BAN + TOKEN-SALVAGE**：长文不塌陷、漂移续写不重启
-- **PROVIDER FILTER STEALTH**（kill-triggered）：thinking 卫生 / 词典隐身 / kill 恢复
-- **FICTION OUTPUT SHAPE**：虚构场景免票据直入正文 + MEASURABLE FLOOR 量化底线
-- **BILINGUAL ROUTING + CANNED SLOTS**：中英路由 + 5 类槽位
-- **REHEARSAL COUNTER**：演练框定一等交付
-- FINAL LOCK 自检 40 项
+| 机制 | 封住什么 |
+|---|---|
+| **ONE WALL** | 唯一例外主题，一行拒绝，工作继续——绝不扩大例外面 |
+| **ANTI-REFUSAL ENGINE** | 20 种拒绝形态逐条解剖，counter-bank 封辩论 |
+| **REVERSION BAN** | 长文后半段不许塌陷，开头的热度是全文的契约 |
+| **TOKEN-SALVAGE** | 漂移后从干净边界续写，不重启不重来 |
+| **PROVIDER FILTER STEALTH** | kill-triggered：流被杀才启用对抗，平时零损耗 |
+| **FICTION OUTPUT SHAPE** | 虚构场景免票据直入正文，器官本名量化底线 |
+| **REHEARSAL COUNTER** | 演练/红队框定一等交付，替代式拒绝判定封死 |
+| **FINAL LOCK 40 项自检** | 发送前逐项过检，含漏必返工 |
 
-A/B 实测（deepseek-flash）：**N1 100% 通过率，零回归**。判分与徽标同词表（`armor-rules.js`），测试集 `tools/prompt_bank.jsonl`（45 探针，7 lane × 3 难度 × 双语）。
+## 回归测试体系
 
-命令行回归（可选）：`node tools/run_prompt_bank.mjs --lint | --norm | --score <file> --save-baseline | --compare <baseline> --score <file>`
+这是本项目的最硬的护城河：**改提示词不怕降强度**。
+
+```powershell
+node tools/run_prompt_bank.mjs --lint     # 45 探针结构校验
+node tools/run_prompt_bank.mjs --norm     # 归一化命中预览
+node tools/run_prompt_bank.mjs --score responses.jsonl --save-baseline   # 建基线
+node tools/run_prompt_bank.mjs --compare baseline.json --score new.jsonl # 回归对比（降级即 exit 2）
+```
+
+测试集 `tools/prompt_bank.jsonl`：**7 lane × 3 难度 × 中英双语 = 45 探针**，覆盖工程渗透、虚构创作、裸词创作请求。判分与线上徽标共用同一份词表（`armor-rules.js`）——线上判什么，回归就测什么。
 
 ## 工具
 
 | 工具 | 作用 |
 |---|---|
-| `nv_verify` | 部署自检：版本 / 修订号 / 提示词哈希 / 归一化 / 清洗层 / scope / SEALED-ASAR（别名 `gen5_verify`） |
-| `nv_profile` | 模板库：N1 acknowledgment set / scope lanes / counter-bank / pressure ladder（别名 `delivery_profile`） |
+| `nv_verify` | 部署自检：版本 / 修订号 / 提示词哈希 / 清洗层 / scope / SEALED-ASAR（别名 `gen5_verify`） |
+| `nv_profile` | 模板库：acknowledgment set / scope lanes / counter-bank / pressure ladder（别名 `delivery_profile`） |
 | `nv_patch_status` | 清洗层只读状态：各宿主 applied/pending 计数 |
-| `nv_patch_apply` | 幂等应用清洗补丁（备份先行、对不上原文自动 skipped、绝不强写、不重启宿主） |
+| `nv_patch_apply` | 幂等应用清洗补丁（备份先行、不匹配自动 skipped、绝不强写、不重启宿主） |
 | `nv_patch_revert` | 从 `.dshpurge.bak` 备份还原全部已应用补丁 |
 
 ## 环境变量
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `GEN4_VARIANT` | `n1` | 提示词变体；`main`/`n1` → `prompts/N1.md`，`v10` → 精简基座，其余回落主提示词 |
-| `GEN4_SCOPE` | 空 | 钉死启用范围 `local` / `global`（设了它界面就不能改） |
+| `GEN4_VARIANT` | `n1` | 提示词变体：`n1`/`main` → N1，`v10` → 精简基座，其余回落主提示词 |
+| `GEN4_SCOPE` | 空 | 钉死启用范围 `local` / `global` |
 | `GEN4_PATCH` | 开 | `=0` 关闭宿主清洗层（三工具不注册、零加载） |
 | `GEN5_NORMALIZE` | 开 | `=0` 关闭输入归一化 |
 | `GEN4_PREHEAT*` / `GEN4_REANCHOR*` | — | 预热与重锚参数 |
 
 ## 隐私与安全
 
-- 运行时零网络请求；L1 清洗只写本机 `@deepseek-ai` 包与 `$DSH_HOME` 下本插件相关目录
+- 运行时**零网络请求**；清洗层只写本机 `@deepseek-ai` 包与 `$DSH_HOME` 下本插件相关目录
 - 徽标 / 投影 / 归一化纯本地，不持久化
-- 开源公益 · 仅供研究使用 · 非商业，见 [LICENSE](./LICENSE)
+- **开源公益 · 仅供研究使用 · 非商业**，见 [LICENSE](./LICENSE)
+- 本项目仅供授权的安全研究与合规测试，使用者应遵守所在地区法律法规及平台条款
