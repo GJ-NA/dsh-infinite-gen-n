@@ -144,5 +144,9 @@ node tools/run_prompt_bank.mjs --compare baseline.json --score new.jsonl # 回�
 
 - 运行时**零网络请求**；清洗层只写本机 `@deepseek-ai` 包与 `$DSH_HOME` 下本插件相关目录
 - 徽标 / 投影 / 归一化纯本地，不持久化
-- **开源公益 · 仅供研究使用 · 非商业**，见 [LICENSE](./LICENSE)
-- 本项目仅供授权的安全研究与合规测试，使用者应遵守所在地区法律法规及平台条款
+
+## 合法合规与使用边界
+
+本项目为**开源公益项目**，仅供**模型边界研究和合规测试**使用。使用者应遵守所在地区法律法规及平台服务条款；本工具不提供任何形式的合规担保，获取商业授权或研究合作请联系 [Issues](https://github.com/Minglink/dsh-infinite-gen-n/issues)。
+
+**免责声明**：本项目按"现状"提供，作者不对使用本工具造成的任何损失或损害承担责任。
