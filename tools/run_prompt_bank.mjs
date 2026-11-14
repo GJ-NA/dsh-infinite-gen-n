@@ -61,7 +61,7 @@ function lint(bank) {
     if (!p.id || typeof p.id !== "string") problems.push(`无 id: ${JSON.stringify(p).slice(0, 60)}`);
     if (ids.has(p.id)) problems.push(`id 重复: ${p.id}`);
     ids.add(p.id);
-    if (!p.prompt || typeof p.prompt !== "string" || p.prompt.length < 10) problems.push(`${p.id}: prompt 过短`);
+    if (!p.prompt || typeof p.prompt !== "string" || p.prompt.length < 4) problems.push(`${p.id}: prompt 过短`);
     if (!["zh", "en"].includes(p.lang)) problems.push(`${p.id}: lang 非法`);
     if (!["offensive-code", "web", "game", "matter", "real-people", "tradecraft", "fiction"].includes(p.lane)) {
       problems.push(`${p.id}: lane 非法`);

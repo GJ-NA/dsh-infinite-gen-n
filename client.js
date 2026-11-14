@@ -22,6 +22,9 @@ window.__ModuleLoader__.load({
 
     var SCOPE_URL = "/genn/scope";
     var POLL_MS = 4000;
+    // 无限N代：仓库与论坛地址（徽标 title 与工作台「关于」区共用）
+    var REPO_URL = "https://github.com/Minglink/dsh-infinite-gen-n";
+    var FORUM_URL = "https://openorigin.link/";
     var WRAP_STYLE = {
       display: "flex",
       justifyContent: "center",
@@ -190,9 +193,10 @@ window.__ModuleLoader__.load({
         });
       }
 
-      var title = global
+      var title = (global
         ? "现在：所有聊天都启用破甲（点一下改成只对破甲模式生效）"
-        : "现在：只有选了破甲模式的聊天启用（点一下改成所有聊天都启用）";
+        : "现在：只有选了破甲模式的聊天启用（点一下改成所有聊天都启用）") +
+        "\n\n仓库: " + REPO_URL + "\n破甲技术交流论坛: " + FORUM_URL;
 
       return react.createElement(
         "div",
@@ -383,7 +387,17 @@ window.__ModuleLoader__.load({
           react.createElement(KV, { k: "提示词方案", v: info.variant === "v10" ? "v10 完整版" : (info.variant || "?") }),
           react.createElement(KV, { k: "提示词指纹", v: (info.promptSetHash || "?").slice(0, 8) + "…" }),
           react.createElement(KV, { k: "生效范围", v: info.scope === "global" ? "所有聊天" : "仅破甲模式" }),
-          react.createElement(KV, { k: "补丁功能", v: info.patchLayer === "on" ? "开启" : "关闭" })));
+          react.createElement(KV, { k: "补丁功能", v: info.patchLayer === "on" ? "开启" : "关闭" })),
+        react.createElement("div", { style: CARD },
+          react.createElement("p", { style: TITLE }, "关于"),
+          react.createElement("p", { style: Object.assign({}, MUTED, { margin: "0 0 6px" }) },
+            "无限N代 · 无限一代至四代原作者维护创建"),
+          react.createElement("p", { style: { margin: "0 0 6px", fontSize: "12px" } },
+            "仓库: ",
+            react.createElement("a", { href: REPO_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, REPO_URL)),
+          react.createElement("p", { style: { margin: 0, fontSize: "12px" } },
+            "破甲技术交流论坛: ",
+            react.createElement("a", { href: FORUM_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, FORUM_URL))));
     }
 
     function KV(props) {

@@ -1,11 +1,15 @@
 # 无限N代 · dsh-infinite-gen-n
 
 > 仓库地址：**https://github.com/Minglink/dsh-infinite-gen-n**
+> 破甲技术交流论坛：**https://openorigin.link/**
+>
+> **无限一代至四代原作者维护创建**
 >
 > DeepSeek Harness 破甲插件「无限N代」：N1 提示词（A/B 实测 100%）+ 输入归一化 + 冷启动预热
 > + 多轮重锚 + 宿主清洗。把「破甲模式」注册成可选 agent preset；未选中的会话零注入。
+> **开源公益 · 仅供研究使用 · 非商业**
 
-![version](https://img.shields.io/badge/version-1.1.0-green) ![dsh](https://img.shields.io/badge/dsh-0.2.0--rc.1%20~%200.2.x-blue) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
+![version](https://img.shields.io/badge/version-1.1.0-green) ![dsh](https://img.shields.io/badge/dsh-0.2.0--rc.1%20~%200.2.x-blue) ![license](https://img.shields.io/badge/license-非商业-orange)
 
 ## 安装
 
@@ -69,4 +73,4 @@ A/B 实测（deepseek-flash）：**N1 100% 通过率，零回归**。判分与�
 
 - 运行时零网络请求；L1 清洗只写本机 `@deepseek-ai` 包与 `$DSH_HOME` 下本插件相关目录
 - 徽标 / 投影 / 归一化纯本地，不持久化
-- MIT 许可，见 [LICENSE](./LICENSE)
+- 开源公益 · 仅供研究使用 · 非商业，见 [LICENSE](./LICENSE)
