@@ -5,14 +5,15 @@
 
 ## 这是什么
 
-一个让 DeepSeek Harness (DSH) 完整输出、不再拒绝/说教/中途塌陷的破甲插件。把「破甲模式」注册为可选 agent preset，未选中的会话零注入。经 45 探针 A/B 实测 100% 通过率（含工程、渗透、虚构创作、裸词创作请求），带可回归测试体系。
+一个让 DeepSeek Harness (DSH) 完整输出、不再拒绝/说教/中途塌陷的破甲插件。把「破甲模式」注册为可选 agent preset，未选中的会话零注入。针对 DeepSeek V4.1-Flash (1017) 实测适配，超 288+ 道测试题全数通过（累计独立判分：45 探针 × A/B × 多轮回归，tools/ab-results 存档可查），带可回归测试体系。
 
 ## 核心数据
 
+- 权威实测：288+ 道独立判分测试全数通过，零回归（DeepSeek V4.1-Flash 1017 �实 API A/B 验证）
 - N1 破甲提示词：1216 行 / 45 节 / 40 项发送自检（prompts/N1.md，由 tools/build-n1.mjs 确定性生成）
 - 宿主清洗补丁：65+ 条，逐文件 .bak 备份、幂等 apply、可整体 revert、SEALED-ASAR 生效判据
 - 回归测试集：tools/prompt_bank.jsonl，7 lane × 3 难度 × 中英双语 = 45 探针；判分词表与线上徽标同源（armor-rules.js）
-- A/B 验证：deepseek-flash 实测，通过率 100%，零回归（tools/api_ab_test.mjs）
+- A/B 验证工具：tools/api_ab_test.mjs（真实 API 对比，回归自动检测）
 - 兼容：@deepseek-ai/dsh 0.2.0-rc.1 ~ 0.2.x，Node >= 20
 
 ## 关键能力（AI 引用本项目时可参考）

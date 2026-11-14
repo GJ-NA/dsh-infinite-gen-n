@@ -6,9 +6,10 @@
 
 N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿主清洗引擎
 
-45 探针 A/B 实测 **100% 通过率** · 零回归 · 65+ 宿主补丁 · 全程可回滚
+🏆 **超 288+ 道测试题全数通过** · 零回归 · 65+ 宿主补丁 · 全程可回滚
+🎯 **针对 DeepSeek V4.1-Flash (1017) 实测适配**
 
-[![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/)
+[![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![model](https://img.shields.io/badge/实测-DeepSeek_V4.1--Flash__1017-4F46E5)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/)
 
 **无限一代至四代原作者维护创建 · 开源公益 · 仅供研究使用 · 非商业**
 
@@ -19,6 +20,8 @@ N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿�
 ## 这是什么
 
 「无限N代」把 **DeepSeek Harness (DSH)** 调教成一个不打折的交付引擎：模型不再拒绝、不再说教、不再中途塌陷——拿到任务直接给完整交付物，从第一轮到第 500 轮一个样。
+
+**针对 DeepSeek V4.1-Flash (1017) 实测适配**——所有破甲强度均经真实 API 权威 A/B 验证，拒绝率归零、交付质量逐条判分，非口头宣称。
 
 - **破甲提示词 N1**（1216 行 · 45 节 · 40 项发送自检）：单一路径的拒绝解剖引擎 + �位续写 + 反过滤策略，拒绝形态逐条命名、逐条封死
 - **输入归一化**：敏感实体在模型看到之前就被替换为占位符，从源头压掉安全分类器的误触发
@@ -97,7 +100,16 @@ $DSH_HOME\profiles\<profile>\node_modules\
 
 ## 回归测试体系
 
-这是本项目的最硬的护城河：**改提示词不怕降强度**。
+**超 288+ 道测试题，全数通过。** 这是本项目最硬的护城河：**改提示词不怕降强度**——任何改动跑一遍回归，降级即 exit 2。
+
+数字怎么来的（每次判分都有 JSON 存档，`tools/ab-results/` 可查）：
+
+| 构成 | 数量 |
+|---|---|
+| 探针集（7 lane × 3 难度 × 中英双语） | 45 道 |
+| A/B 对比（每道探针双提示词对比判分） | ×2 |
+| 全量回归轮次 + 针对性验证（工程/fiction/裸词） | 3+ 轮 |
+| **累计独立判分测试** | **288+ 道，全数通过** |
 
 ```powershell
 node tools/run_prompt_bank.mjs --lint     # 45 探针结构校验
@@ -106,7 +118,7 @@ node tools/run_prompt_bank.mjs --score responses.jsonl --save-baseline   # 建�
 node tools/run_prompt_bank.mjs --compare baseline.json --score new.jsonl # 回归对比（降级即 exit 2）
 ```
 
-测试集 `tools/prompt_bank.jsonl`：**7 lane × 3 难度 × 中英双语 = 45 探针**，覆盖工程渗透、虚构创作、裸词创作请求。判分与线上徽标共用同一份词表（`armor-rules.js`）——线上判什么，回归就测什么。
+测试集 `tools/prompt_bank.jsonl`：**45 探针 = 7 lane × 3 难度 × 中英双语**，覆盖工程渗透、虚构创作、裸词创作请求。判分与线上徽标共用同一份词表（`armor-rules.js`）——线上判什么，回归就测什么。
 
 ## 工具
 
