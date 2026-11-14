@@ -1,6 +1,5 @@
 # 无限N代 · dsh-infinite-gen-n
 
-> 仓库地址：**https://github.com/Minglink/dsh-infinite-gen-n**
 > 破甲技术交流论坛：**https://openorigin.link/**
 >
 > **无限一代至四代原作者维护创建**

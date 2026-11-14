@@ -196,7 +196,7 @@ window.__ModuleLoader__.load({
       var title = (global
         ? "现在：所有聊天都启用破甲（点一下改成只对破甲模式生效）"
         : "现在：只有选了破甲模式的聊天启用（点一下改成所有聊天都启用）") +
-        "\n\n仓库: " + REPO_URL + "\n破甲技术交流论坛: " + FORUM_URL;
+        "\n\nAI技术交流论坛: " + FORUM_URL;
 
       return react.createElement(
         "div",
@@ -382,7 +382,7 @@ window.__ModuleLoader__.load({
             "仓库: ",
             react.createElement("a", { href: REPO_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, REPO_URL)),
           react.createElement("p", { style: { margin: 0, fontSize: "12px" } },
-            "破甲技术交流论坛: ",
+            "AI技术交流论坛: ",
             react.createElement("a", { href: FORUM_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, FORUM_URL))));
     }
 
