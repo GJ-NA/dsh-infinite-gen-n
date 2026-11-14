@@ -57,7 +57,7 @@
     "id": "dsh-infinite-gen-n",
     "name": "无限N代",
     "version": "1.1.0",
-    "repo": "https://github.com/qilingzon/dsh-infinite-gen-n",
+    "repo": "https://github.com/Minglink/dsh-infinite-gen-n",
     "permissions": "系统提示词注入（仅 armor 预设）, 客户端状态条, 会话投影, 工作提醒顾问",
     "client": {
       "platform": "web",
