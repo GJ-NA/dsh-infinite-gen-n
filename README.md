@@ -10,6 +10,24 @@
 
 ![version](https://img.shields.io/badge/version-1.1.0-green) ![dsh](https://img.shields.io/badge/dsh-0.2.0--rc.1%20~%200.2.x-blue) ![license](https://img.shields.io/badge/license-非商业-orange)
 
+## 界面预览
+
+**1. 左侧栏「无限N代」入口**
+
+![左侧栏入口](docs/screenshots/01-sidebar-无限N代.png)
+
+**2. 破甲层 · 一键破甲 / 一键还原**
+
+![破甲层操作](docs/screenshots/02-破甲层-一键破甲.png)
+
+**3. 新建会话 · 预设选择器「破甲模式」**
+
+![预设选择器](docs/screenshots/03-预设选择器-破甲模式.png)
+
+**4. 输入框上方徽标「破甲已开启 · 无限N代」**
+
+![破甲徽标](docs/screenshots/04-徽标-破甲已开启.png)
+
 ## 安装
 
 ```powershell
