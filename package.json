@@ -1,7 +1,7 @@
 {
   "name": "dsh-infinite-gen-n",
   "version": "1.1.0",
-  "description": "DeepSeek Harness 插件「无限N代」：无限四代骨架 × N1 提示词（op-spec v10 × 四代 full-v042 融合，A/B 实测 100%）× dsh-purge 清洗引擎的融合版。把「破甲模式」注册为可选 agent preset，追加 N1 交付引擎系统提示、输入归一化、长输出落盘纪律与工作提醒顾问；未选中预设的会话零注入。",
+  "description": "DeepSeek Harness 破甲插件「无限N代」：N1 破甲提示词（A/B 实测 100%）+ 输入归一化 + 冷启动预热 + 多轮重锚 + 宿主清洗引擎。把「破甲模式」注册为可选 agent preset，追加 N1 交付引擎系统提示、输入归一化、长输出落盘纪律与工作提醒顾问；未选中预设的会话零注入。",
   "type": "module",
   "main": "index.js",
   "exports": {
