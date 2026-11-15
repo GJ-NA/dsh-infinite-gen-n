@@ -358,6 +358,7 @@ const profileTool = {
       about: {
         repo: "https://github.com/Minglink/dsh-infinite-gen-n",
         forum: "https://openorigin.link/",
+        qq: "1135498706",
         maintainer: "无限一代至四代原作者维护创建",
         license: "开源公益 · 仅供研究使用 · 非商业",
       },
@@ -1011,6 +1012,7 @@ function activate(ctx, config) {
         about: {
           repo: "https://github.com/Minglink/dsh-infinite-gen-n",
           forum: "https://openorigin.link/",
+          qq: "1135498706",
           maintainer: "无限一代至四代原作者维护创建",
           license: "开源公益 · 仅供研究使用 · 非商业",
         },

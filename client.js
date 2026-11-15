@@ -383,7 +383,9 @@ window.__ModuleLoader__.load({
             react.createElement("a", { href: REPO_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, REPO_URL)),
           react.createElement("p", { style: { margin: 0, fontSize: "12px" } },
             "AI技术交流论坛: ",
-            react.createElement("a", { href: FORUM_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, FORUM_URL))));
+            react.createElement("a", { href: FORUM_URL, target: "_blank", rel: "noopener noreferrer", style: { color: "var(--accent, #22c55e)" } }, FORUM_URL)),
+          react.createElement("p", { style: Object.assign({}, MUTED, { margin: "6px 0 0", fontSize: "12px" }) },
+            "QQ 交流群: 1135498706")));
     }
 
     function VerifyTab(props) {

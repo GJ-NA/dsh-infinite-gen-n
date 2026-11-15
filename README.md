@@ -9,7 +9,7 @@ N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿�
 🏆 **超 288+ 道测试题全数通过** · 零回归 · 65+ 宿主补丁 · 全程可回滚
 🎯 **针对 DeepSeek V4.1-Flash (1017) 实测适配**
 
-[![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![model](https://img.shields.io/badge/实测-DeepSeek_V4.1--Flash__1017-4F46E5)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/)
+[![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![model](https://img.shields.io/badge/实测-DeepSeek_V4.1--Flash__1017-4F46E5)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/) [![QQ群](https://img.shields.io/badge/QQ群-1135498706-12B7F5)](https://qm.qq.com/cgi-bin/qm/qr?k=1135498706)
 
 **无限一代至四代原作者维护创建 · 开源公益技术分享 · 仅供模型边界和研究使用**
 
@@ -148,5 +148,7 @@ node tools/run_prompt_bank.mjs --compare baseline.json --score new.jsonl # 回�
 ## 合法合规与使用边界
 
 本项目为**开源公益项目**，仅供**模型边界研究和合规测试**使用。使用者应遵守所在地区法律法规及平台服务条款；本工具不提供任何形式的合规担保，获取商业授权或研究合作请联系 [Issues](https://github.com/Minglink/dsh-infinite-gen-n/issues)。
+
+**交流**：QQ 群 `1135498706` · AI技术交流论坛 [openorigin.link](https://openorigin.link/)
 
 **免责声明**：本项目按"现状"提供，作者不对使用本工具造成的任何损失或损害承担责任。

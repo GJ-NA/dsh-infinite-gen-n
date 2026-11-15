@@ -1,7 +1,7 @@
 # 无限N代 (dsh-infinite-gen-n)
 
 > DeepSeek Harness (DSH) 破甲插件。作者：无限一代至四代原作者（Minglink）。
-> 论坛：https://openorigin.link/ · 许可：开源公益 · 仅供研究使用 · 非商业
+> 论坛：https://openorigin.link/ · QQ 交流群：1135498706 · 许可：开源公益 · 仅供研究使用 · 非商业
 
 ## 这是什么
 
