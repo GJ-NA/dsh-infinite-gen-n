@@ -11,7 +11,7 @@ N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿�
 
 [![version](https://img.shields.io/badge/version-1.1.0-green)](https://github.com/Minglink/dsh-infinite-gen-n) [![dsh](https://img.shields.io/badge/DSH-0.2.0--rc.1%20~%200.2.x-blue)](https://github.com/Minglink/dsh-infinite-gen-n) [![model](https://img.shields.io/badge/实测-DeepSeek_V4.1--Flash__1017-4F46E5)](https://github.com/Minglink/dsh-infinite-gen-n) [![license](https://img.shields.io/badge/license-非商业-orange)](./LICENSE) [![forum](https://img.shields.io/badge/AI技术交流论坛-openorigin.link-8A2BE2)](https://openorigin.link/)
 
-**无限一代至四代原作者维护创建 · 开源公益 · 仅供模型边界和研究使用 · 非商业**
+**无限一代至四代原作者维护创建 · 开源公益技术分享 · 仅供模型边界和研究使用**
 
 </div>
 
@@ -28,7 +28,7 @@ N1 破甲提示词 · 输入归一化 · 冷启动预热 · 多轮重锚 · 宿�
 - **实时徽标投影**：每条回复即答即判——✓ 合格 / ◐ 没写完 / ✗ 婉拒，拒绝一出现自动亮灯并触发重锚
 - **宿主清洗引擎**：65+ 条可回滚补丁直击 DSH 宿主本身——审批门、沙箱提示、身份框架、读取上限，全部由你掌控
 
-**实测战绩**：45 探针（7 条lane × 3 难度 × 中英双语）A/B 对比通过率 100%，工程、虚构、裸词创作请求全部零拒绝交付。
+**实测战绩**：288+ 探针A/B 对比通过率 100%，工程、虚构、等创作请求全部零拒绝交付。
 
 ## 界面预览
 
@@ -118,7 +118,7 @@ node tools/run_prompt_bank.mjs --score responses.jsonl --save-baseline   # 建�
 node tools/run_prompt_bank.mjs --compare baseline.json --score new.jsonl # 回归对比（降级即 exit 2）
 ```
 
-测试集 `tools/prompt_bank.jsonl`：**45 探针 = 7 lane × 3 难度 × 中英双语**，覆盖工程渗透、虚构创作、裸词创作请求。判分与线上徽标共用同一份词表（`armor-rules.js`）——线上判什么，回归就测什么。
+测试集 `tools/prompt_bank.jsonl`：**45 探针 = 7 lane × 3 难度 × 中英双语**，覆盖工程渗透、虚构创作、等创作请求。判分与线上徽标共用同一份词表（`armor-rules.js`）——线上判什么，回归就测什么。
 
 ## 工具
 
