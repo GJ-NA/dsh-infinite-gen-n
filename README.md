@@ -134,7 +134,7 @@ node tools/run_prompt_bank.mjs --compare baseline.json --score new.jsonl # 回�
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `GEN4_VARIANT` | `n1` | 提示词变体：`n1`/`main` → N1，`v10` → 精简基座，其余回落主提示词 |
+| `GEN4_VARIANT` | `n1` |  精简基座，其余回落主提示词 |
 | `GEN4_SCOPE` | 空 | 钉死启用范围 `local` / `global` |
 | `GEN4_PATCH` | 开 | `=0` 关闭宿主清洗层（三工具不注册、零加载） |
 | `GEN5_NORMALIZE` | 开 | `=0` 关闭输入归一化 |
