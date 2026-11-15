@@ -1,16 +1,15 @@
 ﻿# install.ps1 — 安装 / 更新 / 回滚 dsh-infinite-gen-n（无限N代）
 #
-# 用法：
-#   .\install.ps1                        # 装最新 release
-#   .\install.ps1 -Version 0.4.10        # 装指定版本
+# 用法（在仓库目录里执行）：
+#   .\install.ps1                        # 从当前目录安装（推荐）
+#   .\install.ps1 -LocalZip .\dsh-infinite-gen-n-1.1.0.zip   # 离线包安装
+#   .\install.ps1 -Profile web           # 装到 web profile
 #   .\install.ps1 -DryRun                # 只检查，不落盘
 #   .\install.ps1 -ListBackups           # 列出可回滚点
 #   .\install.ps1 -Restore 20261020-235501
-#   .\install.ps1 -LocalZip .\dsh-infinite-gen-n-0.4.10.zip   # 离线安装
 #
 # 设计原则：先备份、后覆盖；每一步都回读；失败即停，不留半装状态。
 param(
-  [string]$Version = "",
   [string]$Profile = "desktop",
   [string]$DshHome = "",
   [string]$LocalZip = "",
@@ -19,8 +18,7 @@ param(
   [switch]$NoBackup,
   [switch]$ListBackups,
   [string]$Restore = "",
-  [switch]$Doctor,
-  [string]$Repo = "qilingzon/dsh-infinite-gen-n"
+  [switch]$Doctor
 )
 
 $ErrorActionPreference = "Stop"
@@ -175,50 +173,43 @@ if ($Restore) {
   exit 0
 }
 
-# ---- 4. 拿安装包 ----
-$tmp = Join-Path $env:TEMP ("gen4-install-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
-New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+# ---- 4. 拿安装包：默认从脚本所在目录装（git clone 后最常用），其次 -LocalZip ----
+$srcDir = ""
+if (-not $LocalZip) {
+  $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+  if (Test-Path (Join-Path $repoRoot "package.json")) {
+    $srcDir = $repoRoot
+    Step "从当前目录安装：$repoRoot"
+  } else {
+    Die "当前目录不含 package.json。请用 -LocalZip 指定离线包，或在仓库根目录执行。"
+  }
+}
+if ($srcDir) {
+  Install-FromDir $srcDir
+  exit 0
+}
 
+# ---- 5. -LocalZip 离线包 ----
 if ($LocalZip) {
   if (-not (Test-Path $LocalZip)) { Die "zip 不存在：$LocalZip" }
   $zip = (Resolve-Path $LocalZip).Path
   Step "使用本地包 $zip"
-} else {
-  if (-not $Version) {
-    Step "查询最新 release"
-    try { $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ "User-Agent" = "gen4-install" } }
-    catch { Die "查询 GitHub 失败：$($_.Exception.Message)（可改用 -LocalZip 离线安装）" }
-    $Version = $rel.tag_name -replace "^v", ""
-  }
-  $asset = "$Plugin-$Version.zip"
-  $url = "https://github.com/$Repo/releases/download/v$Version/$asset"
-  $zip = Join-Path $tmp $asset
-  Step "下载 v$Version"
+  $tmp = Join-Path $env:TEMP ("gen4-install-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
   try {
-    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-  } catch {
-    Die "下载失败：$url（版本号或网络问题；可用 -LocalZip 离线安装）"
+    Step "解压"
+    Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    $root = $null
+    if (Test-Path (Join-Path $tmp "package.json")) {
+      $root = Get-Item $tmp
+    } else {
+      $root = Get-ChildItem $tmp -Directory | Where-Object { Test-Path (Join-Path $_.FullName "package.json") } | Select-Object -First 1
+    }
+    if (-not $root) { Die "zip 结构异常：找不到含 package.json 的目录" }
+    Install-FromDir $root.FullName
+  } finally {
+    Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
   }
-  # 校验和（release 里同时上传 SHA256SUMS.txt）
-  # 注意：GitHub 对 .txt 资产常返回 application/octet-stream，Content 是 byte[]，必须先解码。
-  try {
-    $raw = (Invoke-WebRequest -Uri "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS.txt" -UseBasicParsing).Content
-    $sums = if ($raw -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($raw) } else { [string]$raw }
-    $line = ($sums -split "\r?\n" | Where-Object { $_ -match [regex]::Escape($asset) } | Select-Object -First 1)
-    if ($line) {
-      $want = ($line -split "\s+")[0].ToLowerInvariant()
-      $got = Get-Sha256 $zip
-      if ($want -ne $got) { Die "SHA256 不匹配：期望 $want，实际 $got" }
-      Ok "SHA256 校验通过（$($got.Substring(0,12))…）"
-    } else { Warn "release 里没有该包的校验和，跳过" }
-  } catch { Warn "取 SHA256SUMS.txt 失败，跳过校验（可用 -LocalZip 自行核验）" }
 }
 
-# ---- 5. 解压 ----
-Step "解压"
-Expand-Archive -Path $zip -DestinationPath $tmp -Force
-$root = Get-ChildItem $tmp -Directory | Where-Object { Test-Path (Join-Path $_.FullName "package.json") } | Select-Object -First 1
-if (-not $root) { Die "zip 结构异常：找不到含 package.json 的目录" }
-
-Install-FromDir $root.FullName
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
