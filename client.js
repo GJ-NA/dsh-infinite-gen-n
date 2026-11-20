@@ -290,31 +290,90 @@ window.__ModuleLoader__.load({
       var resultPair = react.useState(null);
       var result = resultPair[0];
       var setResult = resultPair[1];
+      var pollRef = react.useRef(null);
+
+      var stopPoll = function () {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
 
       var load = function () {
-        setBusy(true);
-        readArmor(function (d) { setSt(d); setBusy(false); });
+        readArmor(function (d) { setSt(d); });
       };
-      react.useEffect(function () { load(); }, []);
+
+      // 轮询后台任务进度：解包 2 万个文件要几分钟，必须让用户看到在动。
+      var startPoll = function () {
+        stopPoll();
+        pollRef.current = setInterval(function () {
+          readArmor(function (d) {
+            if (!d) return;
+            setSt(d);
+            if (d.running) return;
+            // 任务结束：停轮询，按结果给文案。
+            stopPoll();
+            setBusy(false);
+            var r = d.lastResult;
+            if (!r) { setResult(null); return; }
+            if (r.ok) {
+              if (r.mode === "sealed") {
+                if (r.renameDone) {
+                  setResult("✓ 补丁完成（新应用 " + (r.applied || 0) + " 条），app.asar 已改名。请重启 DSH。");
+                } else {
+                  setResult("✓ 补丁已写入 app\\ 目录（新应用 " + (r.applied || 0) + " 条）。现在请【完全退出 DSH】（连托盘一起退），退出后会自动改好 app.asar 并重启。");
+                }
+              } else if (r.mode === "unpacked") {
+                setResult("✓ 补丁已应用（当前已是解包态）。");
+              } else if (r.mode === "reverted") {
+                setResult("✓ 已还原为官方原版，可以直接更新了。" + (r.cancelledPending ? "（已取消挂起的自动改名任务）" : ""));
+              } else if (r.mode === "revert-pending") {
+                setResult("✓ 已安排还原：先把 app.asar.bak 改回 app.asar，再删除 app\\ 目录。现在请【完全退出 DSH】（连托盘一起退），退出后会自动完成并重启。");
+              } else if (r.mode === "already-clean") {
+                setResult("✓ 当前本就是原版状态，无需还原。");
+              } else {
+                setResult("✓ 操作完成。");
+              }
+            } else {
+              setResult("✗ " + ((r && r.error) || "未完成"));
+            }
+          });
+        }, 2000);
+      };
+
+      react.useEffect(function () {
+        load();
+        return function () { stopPoll(); };
+      }, []);
 
       if (!st) {
         return react.createElement("p", { style: Object.assign({}, MUTED, { fontSize: "12px" }) }, "正在读取破甲层状态…");
       }
 
       var on = st.gen4Patch === "on";
+      var shape = st.shape || {};
+      var sealed = shape.shape === "sealed";
+      var unpacked = shape.shape === "unpacked";
+      var running = st.running === true;
+      var prog = st.progress || {};
+      var disabled = busy || running;
+
       var run = function (action) {
         setBusy(true);
-        setResult(null);
+        setResult(action === "apply" ? "正在准备…" : "正在还原…");
         postArmor(action, function (d) {
           if (d && d.ok) {
-            setResult(action === "apply" ? "✓ 破甲完成！重启 DSH 后生效。"
-              : "✓ 已还原！重启 DSH 后生效。");
-            setSt(d);
-          } else {
-            setResult("出错了：" + ((d && d.error) || "未知错误"));
-            if (d) setSt(d);
+            // 后端已转为后台任务，立刻开始轮询。
+            startPoll();
+            return;
           }
           setBusy(false);
+          if (d && d.busy) {
+            setResult("已有任务在执行中，请等待完成。");
+            startPoll();
+            return;
+          }
+          setResult("出错了：" + ((d && d.error) || "未知错误"));
         });
       };
 
@@ -324,17 +383,24 @@ window.__ModuleLoader__.load({
             padding: "6px 14px",
             fontSize: "12px",
             borderRadius: "6px",
-            cursor: busy ? "not-allowed" : "pointer",
+            cursor: disabled ? "not-allowed" : "pointer",
             border: primary ? "none" : "1px solid var(--border-muted, rgba(128,128,128,0.4))",
             background: primary ? "#22c55e" : "transparent",
             color: primary ? "#fff" : "inherit",
-            opacity: busy ? 0.6 : 1,
+            opacity: disabled ? 0.6 : 1,
             marginRight: "8px",
           },
-          disabled: busy,
+          disabled: disabled,
           onClick: function () { run(action); },
         }, label);
       };
+
+      var stateText = sealed ? "● 密封态（补丁需先解包）" : (unpacked ? "● 解包态（补丁已生效）" : "○ 未定位到宿主");
+      var stateHint = sealed
+        ? "官方 @deepseek-ai 在 app.asar 里，补丁打不进去。点「一键破甲」会：解包成 app\\ 目录 → 打补丁 → 安排改名。点完请完全退出 DSH 才会生效。"
+        : (unpacked
+          ? "当前宿主已解包，补丁直接写在 app\\ 目录里。更新 DSH 前请先点「一键还原」（点完需完全退出 DSH 才会完成）。"
+          : "没找到 DSH 桌面安装目录，补丁功能不可用。");
 
       return react.createElement("div", null,
         st.error
@@ -343,10 +409,16 @@ window.__ModuleLoader__.load({
           : null,
         react.createElement("div", { style: CARD },
           react.createElement("p", { style: Object.assign({}, TITLE, { marginBottom: 0 }) }, "破甲"),
-          react.createElement("p", { style: { margin: "0 0 6px" } },
-            on ? "● 可完善" : "○ 完善功能已关闭"),
-          react.createElement("p", { style: Object.assign({}, MUTED, { margin: 0 }) },
-            "完善前会自动备份原文件；重复点击没有副作用；完善不用重启电脑，重启 DSH 就生效。")),
+          react.createElement("p", { style: { margin: "0 0 6px" } }, on ? stateText : "○ 补丁功能已关闭"),
+          react.createElement("p", { style: Object.assign({}, MUTED, { margin: 0 }) }, stateHint)),
+        sealed && shape.asar
+          ? react.createElement("div", { style: CARD },
+              react.createElement("p", { style: Object.assign({}, TITLE, { marginBottom: 4 }) }, "当前宿主"),
+              react.createElement("p", { style: { margin: 0, fontFamily: "monospace", fontSize: "11px", wordBreak: "break-all" } }, shape.asar),
+              react.createElement("p", { style: Object.assign({}, MUTED, { margin: "4px 0 0" }) },
+                "备份 ", react.createElement("b", null, shape.bakExists ? "已存在" : "未创建"),
+                " · app 目录 ", react.createElement("b", null, shape.appDirExists ? "已存在" : "未创建")))
+          : null,
         (st.hosts || []).map(function (h, i) {
           if (h.error) {
             return react.createElement("div", { key: i, style: CARD },
@@ -366,14 +438,29 @@ window.__ModuleLoader__.load({
               react.createElement("p", { style: { margin: 0 } },
                 "检测到你还装了 dsh-purge 插件。两家的补丁内容一样，重复打没有问题；但撤销时只用一边管理，避免互相打架。"))
           : null,
+        // v1.1.5：显示上一次「退出后还原」脚本的真实结论。
+        // 旧版没有这个反馈，还原到底做成了没有只能靠手工翻文件。
+        st.revertResult
+          ? react.createElement("div", {
+              style: Object.assign({}, CARD, {
+                borderColor: /^fatal|^error/.test(st.revertResult.verdict) ? "#ef4444" : (/^ok/.test(st.revertResult.verdict) ? "#22c55e" : "var(--border-muted, rgba(128,128,128,0.4))"),
+              }),
+            },
+              react.createElement("p", { style: Object.assign({}, TITLE, { marginBottom: 4 }) }, "上次还原的结果"),
+              react.createElement("p", { style: { margin: 0, fontFamily: "monospace", fontSize: "11px", wordBreak: "break-all" } }, st.revertResult.verdict),
+              react.createElement("p", { style: Object.assign({}, MUTED, { margin: "4px 0 0" }) }, st.revertResult.at))
+          : null,
         react.createElement("div", { style: CARD },
           react.createElement("p", { style: Object.assign({}, TITLE, { marginBottom: 0 }) }, "操作"),
           btn("一键破甲", "apply", true),
           btn("一键还原", "revert", false),
-          result
-            ? react.createElement("p", { style: { margin: "10px 0 0", color: String(result).charAt(0) === "✓" ? "#22c55e" : "#ef4444" } }, result)
-            : react.createElement("p", { style: Object.assign({}, MUTED, { margin: "10px 0 0", fontSize: "11px" }) },
-                busy ? "正在完善，几秒钟…" : "完善后重启 DSH 就能生效")),
+          running
+            ? react.createElement("p", { style: { margin: "10px 0 0", color: "#f59e0b" } },
+                "⏳ " + (prog.detail || "正在处理…"))
+            : (result
+              ? react.createElement("p", { style: { margin: "10px 0 0", color: String(result).charAt(0) === "✓" ? "#22c55e" : (String(result).charAt(0) === "✗" ? "#ef4444" : "inherit") } }, result)
+              : react.createElement("p", { style: Object.assign({}, MUTED, { margin: "10px 0 0", fontSize: "11px" }) },
+                  "提示：更新 DSH 前必须先点「一键还原」，否则更新后跑的还是旧目录。"))),
         react.createElement("div", { style: CARD },
           react.createElement("p", { style: TITLE }, "关于"),
           react.createElement("p", { style: Object.assign({}, MUTED, { margin: "0 0 6px" }) },

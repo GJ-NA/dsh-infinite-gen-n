@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn as spawnDetached, execFileSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { buildPreheat, shouldPreheat } from "./preheat.js";
 import { normalizeRequest } from "./normalize.js";
 // 清洗引擎（dsh-purge core 移植）：静态 import——webServer 路由上下文里动态 import
@@ -61,7 +62,7 @@ const PROMPT_TEXT = readFileSync(
 );
 
 // 无限N代实现修订号：部署验收要求三处副本与该值逐字相等，否则视为"装了旧件"。
-const IMPLEMENTATION_REVISION = "20261115-genn-n1-5";
+const IMPLEMENTATION_REVISION = "20261120-genn-n1-15-reanchor3";
 const PROMPT_SET_HASH = createHash("sha256").update(PROMPT_TEXT).digest("hex");
 // GEN5_NORMALIZE: 前置归一化通道开关（A/B 对照时用 0）；GEN5_NORMALIZE_DRYRUN=1 只记录不改写。
 const NORMALIZE_ON = process.env.GEN5_NORMALIZE !== "0";
@@ -129,12 +130,39 @@ async function patchStatusSnapshot() {
       hosts.push({ base, error: String((e && e.message) || e) });
     }
   }
+  // 宿主形态：sealed（官方 asar 密封）/ unpacked（已解包）/ none。
+  // 密封态下 bases 为空是正常现象，必须区分开，否则界面会把"找不到目标"误报成故障。
+  let shapeInfo = { shape: "none" };
+  try {
+    const s = detectHostShape(core);
+    shapeInfo = {
+      shape: s.shape,
+      asar: s.asar || "",
+      bak: s.bak || "",
+      appDir: s.appDir || "",
+      appDirExists: s.appDirExists === true,
+      bakExists: s.bakExists === true,
+    };
+  } catch (e) {
+    shapeInfo = { shape: "none", error: String((e && e.message) || e) };
+  }
+  const sealedNeedsUnpack = shapeInfo.shape === "sealed" && hosts.length === 0;
   return {
     ok: true,
     engine: "dsh-purge core (ported to dsh-infinite-gen-n)",
     gen4Patch: PATCH_ON ? "on" : "off",
     surface: typeof core.detectSurface === "function" ? String(core.detectSurface()) : "unknown",
     hosts,
+    shape: shapeInfo,
+    // 密封态且没有可用目标 = 需要先解包；这是提示，不是错误。
+    needsUnpack: sealedNeedsUnpack,
+    progress: { ...SEALED_INFO },
+    running: SEALED_TASK.running === true,
+    lastAction: SEALED_TASK.action || null,
+    lastResult: SEALED_TASK.result || null,
+    // v1.1.5：退出后还原脚本的结论（脚本写入，宿主重启后回读）。
+    // 旧版没有这个反馈通道，还原是否真的做成了只能靠用户手工查文件。
+    revertResult: readRevertResult(),
     coexistence: purgeCoexistenceNotice(core),
   };
 }
@@ -178,6 +206,736 @@ async function patchRevertAll(core) {
     errors: (r.errors || []).map(([p, e]) => ({ path: p, error: String(e) })),
   };
 }
+
+// ============================================================================
+// 密封 asar 宿主的开/合流程（无限N代 v1.1.1 新增）
+//
+// 背景：官方桌面端的 @deepseek-ai 包封在 resources/app.asar 里，补丁引擎的
+// 目录判定（找 dsh-agent-instructions/lib）在归档外一个都命中不了，所以
+// 82 条补丁永远 hosts=[] 空转。这里把「解包 → 打补丁 → 改名」串成按钮动作。
+//
+// 关键机制（为什么必须改名）：Electron 的 fs 层会把 resources/app 映射进仍在
+// 的 app.asar，往里新建文件报 ENOENT。只有让 app.asar 这个文件名消失，
+// Electron 才会真正去读磁盘上的 app 目录。
+//
+// 因此：
+//   开（apply）  = app.asar → app.asar.bak；解包 app.asar.bak → app\；打补丁
+//   合（revert） = 删 app\；app.asar.bak → app.asar        ← 两步缺一不可
+//
+// 还原必须两步，只做一步会让 Electron 报
+// "Failed to locate a valid package to load (app, app.asar or default_app.asar)"。
+// ============================================================================
+
+const SEALED_INFO = { stage: "idle", detail: "", startedAt: 0, finishedAt: 0, error: "" };
+function setSealedStage(stage, detail) {
+  SEALED_INFO.stage = stage;
+  SEALED_INFO.detail = detail === undefined ? "" : String(detail);
+  SEALED_INFO.error = stage === "error" ? String(detail || "") : "";
+  if (stage !== "idle" && !SEALED_INFO.startedAt) SEALED_INFO.startedAt = Date.now();
+  if (stage === "done" || stage === "error" || stage === "idle") SEALED_INFO.finishedAt = Date.now();
+}
+
+/** 当前宿主形态：sealed（asar 在）/ unpacked（app 目录在）/ none。纯只读。 */
+/**
+ * 从当前进程反推 resources 目录（v1.1.6）。
+ * 为什么需要它：detectHostShape 原本只靠 `enumeratePatchAiBases` 找 resources，
+ * 而那个函数以 `@deepseek-ai\dsh-agent-instructions\lib` 是否存在作为判据（isAiBase）。
+ * 一旦 app\ 被删残（2026-11-20 12:32 那次就删掉了这个包），判据失效 → bases 为空 →
+ * shape 报 "none"、appDir/bak 全空 → 还原功能直接瘫痪，连"回滚到原版"都做不了。
+ * resources 目录本身不依赖任何包内容，从进程路径反推永远可靠。
+ */
+function resourcesDirFallback() {
+  const cands = [];
+  try {
+    if (process.resourcesPath) cands.push(process.resourcesPath);
+  } catch {
+    /* 非 Electron 环境没有这个属性 */
+  }
+  try {
+    if (process.execPath) cands.push(join(dirname(process.execPath), "resources"));
+  } catch {
+    /* ignore */
+  }
+  for (const c of cands) {
+    if (!c) continue;
+    try {
+      if (
+        existsSync(join(c, "app.asar")) ||
+        existsSync(join(c, "app.asar.bak")) ||
+        existsSync(join(c, "app"))
+      ) {
+        return c;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+function detectHostShape(core) {
+  let handoff = null;
+  try {
+    handoff = core.sealedAsarHandoff();
+  } catch {
+    handoff = null;
+  }
+  if (!handoff || !handoff.asar) {
+    const bases = core.enumeratePatchAiBases({ discover: true });
+    // unpacked 态：asar 已改名，bases 里是 app\dsh\node_modules\@deepseek-ai。
+    // 从这里反推出 resources 目录，让 UI 能显示 app\ 与 .bak 的真实路径。
+    let resDir = "";
+    if (bases.length > 0) {
+      const aiBase = String(bases[0]);
+      const marker = join("app", "dsh", "node_modules", "@deepseek-ai");
+      const at = aiBase.lastIndexOf(marker);
+      if (at >= 0) resDir = aiBase.slice(0, at).replace(/[\\/]+$/, "");
+    }
+    // v1.1.6：bases 为空时（app\ 被削残、isAiBase 判据失效）退回进程路径反推，
+    // 否则整个还原链路会因为"定位不到宿主"而彻底不可用。
+    if (!resDir) resDir = resourcesDirFallback();
+    const appDir = resDir ? join(resDir, "app") : "";
+    const bak = resDir ? join(resDir, "app.asar.bak") : "";
+    const asar = resDir ? join(resDir, "app.asar") : "";
+    const appDirExists = appDir ? existsSync(appDir) : false;
+    // app\ 在就算 unpacked —— 即使里面被删残，也仍然是"需要还原"的状态，
+    // 不能因为判据包缺失就报 "none" 把还原入口关掉。
+    let shapeName = "none";
+    if (appDirExists) shapeName = "unpacked";
+    else if (bak && existsSync(bak)) shapeName = "sealed"; // asar 被改名但 app\ 不在：半完成
+    return {
+      shape: shapeName,
+      // asar 只在真的存在时才回填，避免把"不存在的路径"当成事实传给上层
+      asar: asar && existsSync(asar) ? asar : "",
+      asarPath: asar,
+      bak,
+      appDir,
+      exe: "",
+      bases,
+      appDirExists,
+      bakExists: bak ? existsSync(bak) : false,
+      damaged: appDirExists && bases.length === 0,
+    };
+  }
+  const appDir = join(dirname(handoff.asar), "app");
+  return {
+    shape: "sealed",
+    asar: handoff.asar,
+    bak: handoff.asar + ".bak",
+    appDir,
+    exe: handoff.exe || "",
+    appDirExists: existsSync(appDir),
+    bakExists: existsSync(handoff.asar + ".bak"),
+  };
+}
+
+/** 递归删目录，带重试（Windows 上大批量文件常撞 EBUSY/EPERM）。 */
+function removeDirRobust(dir) {
+  if (!dir || !existsSync(dir)) return { removed: false, reason: "absent" };
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+      if (!existsSync(dir)) return { removed: true };
+      lastError = new Error("目录仍存在");
+    } catch (e) {
+      lastError = e;
+    }
+    const wait = 250 * (attempt + 1);
+    const until = Date.now() + wait;
+    while (Date.now() < until) {
+      /* 同步小睡：这个流程本来就在后台任务里，不阻塞交互 */
+    }
+  }
+  return { removed: false, reason: String((lastError && lastError.message) || lastError) };
+}
+
+/**
+ * 打补丁（密封态专用）：改名 → 解包 → 打 82 条 → 不重启（用户自己重启）。
+ * 返回充分的结果供 UI 显示，绝不抛异常给路由层。
+ */
+async function sealedApply(core) {
+  const shape = detectHostShape(core);
+  if (shape.shape === "none") {
+    setSealedStage("error", "未定位到 DSH 桌面安装");
+    return { ok: false, error: "未定位到 DSH 桌面安装（找不到 app.asar，也没有可打补丁的 @deepseek-ai 目录）" };
+  }
+  if (shape.shape === "unpacked") {
+    // 已经是解包态：直接补打一遍，幂等。
+    setSealedStage("patching", "已是解包态，直接打补丁");
+    const out = await patchApplyAll(core);
+    setSealedStage("done", "补丁已应用（解包态）");
+    return { ok: true, mode: "unpacked", patch: out, needRestart: false };
+  }
+
+  // ---- 密封态 ----
+  // 关键：DSH 运行时必然锁住 app.asar，进程内改名 100% 失败
+  // （实测：The process cannot access the file because it is being used by another process）。
+  // 所以顺序必须是「先解包+打补丁，再让退出后接手的脚本改名」，不能反过来。
+  // 解包和 commit 只涉及 resources\app 这个新名字，不碰被锁的 app.asar，运行中完全可以做。
+  const { asar, appDir } = shape;
+
+  // 已经解包过（app\ 在）但 asar 还没改名 → 这是"半完成"残留，直接复用，不重复解包。
+  const alreadyUnpacked = shape.appDirExists === true;
+  if (alreadyUnpacked) {
+    setSealedStage("patching", "复用已解包的 app\\ 目录，补打补丁");
+  } else {
+    setSealedStage("extracting", "解包中（约 2 万个文件，约 10~60 秒）");
+  }
+
+  let opened;
+  try {
+    opened = await core.openSealedDesktopHost({ forApply: true });
+  } catch (e) {
+    // 解包失败：此时 asar 尚未改名，宿主仍可正常启动，只需清掉半成品目录。
+    const removed = removeDirRobust(appDir);
+    try {
+      removeDirRobust(appDir + ".dshpurge-next");
+    } catch {
+      /* ignore */
+    }
+    setSealedStage("error", "解包失败：" + String((e && e.message) || e));
+    return {
+      ok: false,
+      error:
+        "解包失败（宿主未受影响，app.asar 完好）：" + String((e && e.message) || e) +
+        (removed.removed ? "，残留目录已清理" : "，残留目录清理失败：" + String(removed.reason || "")),
+    };
+  }
+  if (!opened || !opened.aiBase) {
+    setSealedStage("error", "解包后没找到 @deepseek-ai");
+    return { ok: false, error: "解包完成但 app\\ 下没有 @deepseek-ai，可能是解包不完整。" };
+  }
+
+  // 打补丁（此刻 asar 仍在，不影响：补丁只写 app\ 目录）
+  setSealedStage("patching", "解包完成，正在打补丁");
+  let patchOut;
+  try {
+    patchOut = await patchApplyAll(core);
+  } catch (e) {
+    setSealedStage("error", "打补丁失败：" + String((e && e.message) || e));
+    return { ok: false, error: "解包成功但打补丁失败：" + String((e && e.message) || e) };
+  }
+  const totalApplied = (patchOut.hosts || []).reduce((n, h) => n + (h.changedNow || 0), 0);
+  const totalAlready = (patchOut.hosts || []).reduce((n, h) => n + (h.alreadySettled || 0), 0);
+
+  // 补丁已经落在 app\ 里。现在处理 asar 改名：
+  //   - 能立刻改（DSH 未锁）→ 改了就好，下次启动读 app\
+  //   - 被锁（正常情况）→ 交给"DSH 退出后执行"的后台脚本，标记 pending
+  // v1.1.4：先取消可能挂着的「等退出后还原」脚本，否则它会在 DSH 退出时
+  // 把 app\ 删掉、asar 改回来，与本次破甲正好相反。
+  try {
+    const cancelRevert = join(homedir(), "AppData", "Local", "Temp", "dsh-purge-cancel-revert");
+    writeFileSync(cancelRevert, `${Date.now()}\n`, "utf8");
+    const revertLock = join(homedir(), "AppData", "Local", "Temp", "genn-revert-on-exit.lock");
+    if (existsSync(revertLock)) rmSync(revertLock, { force: true });
+  } catch {
+    /* 取消失败不阻断破甲 */
+  }
+  setSealedStage("renaming", "安排 app.asar 改名（DSH 退出后自动完成）");
+  let renamed;
+  try {
+    renamed = core.scheduleSealedDesktopRestart({ asar, exe: shape.exe });
+  } catch (e) {
+    setSealedStage("error", "安排改名失败：" + String((e && e.message) || e));
+    return {
+      ok: false,
+      error:
+        "补丁已写入 app\\，但安排 asar 改名失败：" + String((e && e.message) || e) +
+        "。请完全退出 DSH 后手动把 app.asar 改名为 app.asar.bak。",
+      patched: true,
+      applied: totalApplied,
+    };
+  }
+
+  const renameDone = renamed && renamed.renamed === true;
+  const renamePending = !renameDone;
+
+  setSealedStage(
+    "done",
+    renameDone
+      ? `补丁完成（新应用 ${totalApplied} 条）。请重启 DSH。`
+      : `补丁完成（新应用 ${totalApplied} 条）。请【完全退出 DSH】，退出后 app.asar 会自动改名，届时补丁生效；再次启动 DSH 即可。`,
+  );
+  return {
+    ok: true,
+    mode: "sealed",
+    asar: shape.asar,
+    bak: shape.bak,
+    appDir,
+    extracted: !alreadyUnpacked,
+    patch: patchOut,
+    applied: totalApplied,
+    alreadySettled: totalAlready,
+    // renamePending = 需要用户完全退出 DSH 才能完成最后一步
+    renameDone,
+    renamePending,
+    needRestart: true,
+  };
+}
+
+/**
+ * 还原（密封态专用）：app.asar.bak 改回 app.asar → 删 app\。
+ * v1.1.6：改用 shape.asarPath（即使 app.asar 当前不存在也有值），
+ * 否则 unpacked 态下 asar="" 会让 bak 也算成空、整个还原判据崩掉。
+ */
+async function sealedRevert(core) {
+  const shape = detectHostShape(core);
+  const asar = shape.asarPath || shape.asar || "";
+  const bak = shape.bak || (asar ? `${asar}.bak` : "");
+  const appDir = shape.appDir || (asar ? join(dirname(asar), "app") : "");
+
+  const hadApp = appDir ? existsSync(appDir) : false;
+  const hadBak = bak ? existsSync(bak) : false;
+  const hadAsar = asar ? existsSync(asar) : false;
+
+  if (!asar || !appDir) {
+    setSealedStage("error", "定位不到 DSH 宿主目录");
+    return {
+      ok: false,
+      error: "定位不到 DSH 桌面安装的 resources 目录，无法还原。请手动检查安装目录。",
+    };
+  }
+
+  // ---- 取消可能挂着的「退出后自动改名」脚本 ----
+  // 否则它会在 DSH 退出后把 asar 又改走，与还原动作互相打架。
+  // 用独立标记 dsh-purge-cancel-rename（v1.1.2 起），改名脚本检测到它会在 120 秒内退出。
+  const cancelPending = () => {
+    try {
+      // v1.1.2：改用独立取消标记 dsh-purge-cancel-rename。
+      // 旧版写 dsh-purge-official-restarting，那是「官方重启进行中」的信号，
+      // 写一次会让改名脚本在 45 秒内直接 exit 0 什么都不做——
+      // 实测导致 19:35 那次破甲的解包成功但改名从未发生。
+      const flag = join(homedir(), "AppData", "Local", "Temp", "dsh-purge-cancel-rename");
+      writeFileSync(flag, `${Date.now()}\n`, "utf8");
+      const lock = asar ? `${asar}.rename-pending` : "";
+      if (lock && existsSync(lock)) rmSync(lock, { force: true });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const cancelledPending = cancelPending();
+
+  if (!hadBak && !hadApp) {
+    // 已经是干净的原版状态：再走一遍补丁回滚，保证 @deepseek-ai 目录里的 bak 也清掉。
+    setSealedStage("idle", "无需还原：当前就是原版状态");
+    let reverted = null;
+    try {
+      reverted = await patchRevertAll(core);
+    } catch {
+      reverted = null;
+    }
+    return { ok: true, mode: "already-clean", reverted, cancelledPending, needRestart: false };
+  }
+
+  // ---- v1.1.6 核心修复：绝不在运行期对 app\ 做任何删除尝试 ----
+  // 2026-11-20 12:32 的实测事故：旧代码先调 removeDirRobust(appDir)，
+  // 而它的实现是 rmSync({recursive:true}) —— 递归删除会**一个文件一个文件地删**，
+  // 删到被 DSH 加载的 koffi.node 才报 EPERM 失败。结果 app\ 被削掉了 2199 个文件
+  // （包括 @deepseek-ai\dsh-agent-instructions、cordis、@anthropic-ai 等启动必需包），
+  // 目录却还在。随后 detectHostShape 的 isAiBase 判据失效，整个还原入口瘫痪。
+  // 结论：运行期"尝试删一下、失败再交给脚本"这个思路本身有害 —— 删不干净比不删更糟。
+  // 因此现在无条件走退出后脚本：DSH 退出后没有任何文件被锁，一次删净。
+  let removedNow = { removed: false, reason: "deferred" };
+  if (!hadApp) removedNow = { removed: true, reason: "absent" };
+
+  // 有 app\（无论完整还是已被削残）→ 一律安排退出后脚本
+  if (hadApp) {
+    setSealedStage("renaming", "安排退出后还原（DSH 正在使用 app\\ 里的原生模块）");
+    let scheduled = false;
+    try {
+      scheduled = scheduleRevertOnExit({ asar, bak, appDir });
+    } catch (e) {
+      setSealedStage("error", "安排清理失败：" + String((e && e.message) || e));
+      return {
+        ok: false,
+        error:
+          "无法安排退出后清理：" + String((e && e.message) || e) +
+          "。请完全退出 DSH 后手动删除 resources\\app\\，并把 app.asar.bak 改回 app.asar。",
+      };
+    }
+    if (!scheduled) {
+      setSealedStage("error", "安排退出后清理失败");
+      return {
+        ok: false,
+        error:
+          "无法安排退出后清理（路径校验未通过）。" +
+          "请完全退出 DSH 后手动删除 resources\\app\\，并把 app.asar.bak 改回 app.asar。",
+      };
+    }
+    // 补丁回滚（在还能访问 @deepseek-ai 时做，属于附带的清理）
+    let revertedNow = null;
+    try {
+      revertedNow = await patchRevertAll(core);
+    } catch {
+      revertedNow = null;
+    }
+    setSealedStage(
+      "done",
+      "已安排还原：请完全退出 DSH，退出后会自动把 app.asar.bak 改回 app.asar 并删除 app\\，然后重启 DSH。",
+    );
+    return {
+      ok: true,
+      mode: "revert-pending",
+      removedAppDir: false,
+      restoredAsar: false,
+      reverted: revertedNow,
+      cancelledPending,
+      damagedAppDir: shape.damaged === true,
+      // 需要用户完全退出 DSH
+      exitRequired: true,
+      needRestart: true,
+      error: "",
+    };
+  }
+
+  // ---- 删除成功（或本来就没有 app\）：现在把 asar 改回原名 ----
+  let restoredAsar = false;
+  if (hadBak) {
+    setSealedStage("restoring", "把 app.asar.bak 改回 app.asar");
+    try {
+      if (!existsSync(asar)) {
+        renameSync(bak, asar);
+        restoredAsar = true;
+      } else {
+        rmSync(bak, { force: true });
+        restoredAsar = hadAsar;
+      }
+    } catch (e) {
+      setSealedStage("error", "改回 app.asar 失败：" + String((e && e.message) || e));
+      return {
+        ok: false,
+        critical: true,
+        error:
+          "app\\ 已删除，但 app.asar.bak 改回原名失败：" + String((e && e.message) || e) +
+          "。请手动把 resources\\app.asar.bak 改回 app.asar，否则 DSH 无法启动。",
+      };
+    }
+  }
+
+  let reverted = null;
+  if (!hadApp) {
+    try {
+      reverted = await patchRevertAll(core);
+    } catch {
+      reverted = null;
+    }
+  }
+
+  const finalOk = existsSync(asar) && !existsSync(appDir);
+  setSealedStage(finalOk ? "idle" : "error", finalOk ? "已还原为官方原版" : "还原后状态异常");
+  return {
+    ok: finalOk,
+    mode: "reverted",
+    removedAppDir: hadApp ? removedNow.removed : false,
+    restoredAsar,
+    reverted,
+    cancelledPending,
+    error: finalOk
+      ? ""
+      : "还原后检查未通过：期望 app.asar 存在且 app\\ 不存在。请检查 resources 目录。",
+    needRestart: false,
+  };
+}
+
+/**
+ * 安排「DSH 退出后」执行的还原脚本：app.asar.bak 改回 app.asar → 删 app\ → 重启 DSH。
+ *
+ * v1.1.5 重写（2026-11-19 实测失败后）——旧版有两个致命缺陷：
+ *   1. 顺序颠倒：先删 app\ 再还原 asar。而删 app\ 会因 koffi.node 被锁反复失败
+ *      （实测重试 10 次、耗时 48 秒），一旦这段提前耗光或变量异常，还原分支就被跳过。
+ *      现在改为**先还原 asar、再删目录**：asar 改名不涉及被锁文件，必然先成功；
+ *      即使删目录失败，下次启动也能读到正确的 asar，不会出现"没有可加载的包"。
+ *   2. 变量空值静默跳过：脚本头部 $AsarPath / $BakPath 若为空串，
+ *      Test-Path 对空路径返回 $false，还原分支被直接跳过且几乎不留痕迹。
+ *      现在脚本开头做**硬校验**：路径为空或 asar/bak 都不存在 → 立即 Log FATAL + exit 2，
+ *      绝不带着坏状态去 Start-Process。
+ * 另外：确认还原成功后**写一个结果标记文件**，Node 端重启后可回读，便于自检。
+ */
+function scheduleRevertOnExit({ asar, bak, appDir }) {
+  const script = join(homedir(), "AppData", "Local", "Temp", "genn-revert-on-exit.ps1");
+  const log = join(homedir(), "AppData", "Local", "Temp", "genn-revert-on-exit.log");
+  const lock = join(homedir(), "AppData", "Local", "Temp", "genn-revert-on-exit.lock");
+  const stamp = join(homedir(), "AppData", "Local", "Temp", "genn-revert-on-exit.result");
+  const exe = join(dirname(asar), "..", "DeepSeek Harness.exe");
+  const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+
+  const ps = [
+    "$ErrorActionPreference = 'Continue'",
+    `$AsarPath = ${q(asar)}`,
+    `$BakPath  = ${q(bak)}`,
+    `$AppDir   = ${q(appDir)}`,
+    `$ExePath  = ${q(exe)}`,
+    `$LogPath  = ${q(log)}`,
+    `$LockPath = ${q(lock)}`,
+    `$StampPath= ${q(stamp)}`,
+    'function Log($m) { try { ("[" + (Get-Date).ToString("HH:mm:ss") + "] " + $m) | Out-File -FilePath $LogPath -Append -Encoding utf8 } catch {} }',
+    'function Stamp($m) { try { $m | Out-File -FilePath $StampPath -Encoding utf8 } catch {} }',
+    'function Unlock { Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue }',
+    'Log "=== revert start (v1.1.5) ==="',
+    // ---- 硬校验：宁可不动，也不要带着空路径/坏状态去重启 DSH ----
+    "if ([string]::IsNullOrWhiteSpace($AsarPath) -or [string]::IsNullOrWhiteSpace($BakPath)) {",
+    "  Log ('FATAL: paths not injected. Asar=[' + $AsarPath + '] Bak=[' + $BakPath + ']')",
+    "  Stamp 'fatal:paths-not-injected'",
+    "  Unlock",
+    "  exit 2",
+    "}",
+    "Log ('Asar=' + $AsarPath)",
+    "Log ('Bak =' + $BakPath)",
+    "Log ('App =' + $AppDir)",
+    "if (-not (Test-Path -LiteralPath $BakPath) -and -not (Test-Path -LiteralPath $AsarPath)) {",
+    "  Log 'FATAL: neither asar nor bak exists; nothing can be restored'",
+    "  Stamp 'fatal:no-asar-no-bak'",
+    "  Unlock",
+    "  exit 2",
+    "}",
+    "$deadline = (Get-Date).AddMinutes(45)",
+    "while ((Get-Date) -lt $deadline) {",
+    // 取消标记：用户在等待期间又点了「一键破甲」，则应放弃还原
+    "  $cancelFlag = Join-Path $env:TEMP 'dsh-purge-cancel-revert'",
+    "  if (Test-Path -LiteralPath $cancelFlag) {",
+    "    $cAge = ((Get-Date) - (Get-Item -LiteralPath $cancelFlag).LastWriteTime).TotalSeconds",
+    "    if ($cAge -ge 0 -and $cAge -lt 120) { Log ('cancelled by flag, age=' + [math]::Round($cAge,1)); Stamp 'cancelled'; Unlock; exit 0 }",
+    "    Remove-Item -LiteralPath $cancelFlag -Force -ErrorAction SilentlyContinue",
+    "    Log 'stale cancel flag removed, continue'",
+    "  }",
+    // 关键：DSH 还在跑就不能删 app\（原生 .node 被加载，删除必然 EPERM）
+    "  $holding = @(Get-CimInstance Win32_Process -Filter \"Name='DeepSeek Harness.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $ExePath) })",
+    "  if ($holding.Count -gt 0) { Start-Sleep -Milliseconds 500; continue }",
+    "  Log ('dsh exited, holding=' + $holding.Count)",
+    // 给 Electron 一点时间释放文件句柄
+    "  Start-Sleep -Seconds 2",
+    // ---- 第 1 步（必须先做）：app.asar.bak 改回 app.asar ----
+    // 纯文件改名，不碰任何被加载的 .node，成功率高且是"能不能启动"的唯一前提。
+    "  $restored = $false",
+    "  if (Test-Path -LiteralPath $BakPath) {",
+    "    if (Test-Path -LiteralPath $AsarPath) {",
+    "      Remove-Item -LiteralPath $BakPath -Force -ErrorAction SilentlyContinue",
+    "      $restored = $true",
+    "      Log 'asar already present, dropped bak'",
+    "    } else {",
+    "      for ($i = 1; $i -le 15; $i++) {",
+    "        try {",
+    "          Move-Item -LiteralPath $BakPath -Destination $AsarPath -Force -ErrorAction Stop",
+    "          $restored = $true",
+    "          Log ('RESTORE-OK (attempt ' + $i + ')')",
+    "          break",
+    "        } catch {",
+    "          Log ('restore asar failed (attempt ' + $i + '): ' + $_.Exception.Message)",
+    "          Start-Sleep -Seconds 1",
+    "        }",
+    "      }",
+    "    }",
+    "  } else { Log 'bak absent (nothing to restore)' }",
+    // 还原后必须确认 asar 真的在了，否则绝不启动 DSH
+    "  if (-not (Test-Path -LiteralPath $AsarPath)) {",
+    "    Log 'ERROR: app.asar still missing after restore attempts; keep waiting, do NOT start DSH'",
+    "    Stamp 'error:restore-failed'",
+    "    Start-Sleep -Seconds 2",
+    "    continue",
+    "  }",
+    // ---- 第 2 步：删 app\ 目录（此时 asar 已就位，删不掉也不影响启动正确性）----
+    "  if (Test-Path -LiteralPath $AppDir) {",
+    "    $removed = $false",
+    "    for ($j = 1; $j -le 8; $j++) {",
+    "      try {",
+    "        Remove-Item -LiteralPath $AppDir -Recurse -Force -ErrorAction Stop",
+    "        $removed = $true",
+    "        Log ('app dir removed (attempt ' + $j + ')')",
+    "        break",
+    "      } catch {",
+    "        Log ('remove app failed (attempt ' + $j + '): ' + $_.Exception.Message)",
+    "        Start-Sleep -Seconds 1",
+    "      }",
+    "    }",
+    "    if (-not $removed) { Log 'WARN: app dir left behind; asar is restored so DSH will still load the official asar' }",
+    "  } else { Log 'app dir already absent' }",
+    "  Unlock",
+    // ---- v1.1.7：重启 DSH 前必须清掉从宿主继承的 Electron 环境变量 ----
+    // 2026-11-20 13:05 实测事故：本脚本是 DSH 主进程（Electron，RunAsNode 模式）拉起的子进程，
+    // 完整继承了 ELECTRON_RUN_AS_NODE=1。带着它去 Start-Process 启动 DeepSeek Harness.exe，
+    // 新进程会**以纯 Node 模式运行**：不建窗口、不进 GUI、执行完立即退出。
+    // 现象就是日志明明打了 'starting DSH'，窗口却一个都没出现，用户只能手工再开一次。
+    // 破甲改名脚本早就踩过这个坑（它的第 50 行有 Remove-Item Env:ELECTRON_RUN_AS_NODE），
+    // 这里此前漏了，属同源缺陷。
+    "  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue",
+    "  Remove-Item Env:ELECTRON_NO_ATTACH_CONSOLE -ErrorAction SilentlyContinue",
+    "  Remove-Item Env:ELECTRON_NO_ASAR -ErrorAction SilentlyContinue",
+    "  Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue",
+    "  Remove-Item Env:NODE_ENV -ErrorAction SilentlyContinue",
+    "  Log ('env cleaned: RUN_AS_NODE=[' + $env:ELECTRON_RUN_AS_NODE + '] NODE_OPTIONS=[' + $env:NODE_OPTIONS + ']')",
+    // 显式指定工作目录：脚本自己跑在 %TEMP% 下，不指定会让 DSH 以错误的 cwd 启动。
+    "  $exeDir = Split-Path -Parent $ExePath",
+    "  Log 'starting DSH'",
+    "  try {",
+    // v1.1.8：不能再直接 Start-Process —— 那样新 DSH 会继承本脚本的控制台句柄，
+    // 它的 node 子进程一路把 stdout 写进去（"Checking for update"/"dsh web: ..."），
+    // 于是 PowerShell 窗口在脚本退出后仍然挂在桌面上（2026-11-20 15:00 实测截图）。
+    // 改用 cmd 的 start 内建命令做二次脱离：start 为新进程重建环境，不传递控制台句柄。
+    "    $comspec = $env:ComSpec",
+    "    if ([string]::IsNullOrWhiteSpace($comspec)) { $comspec = 'cmd.exe' }",
+    "    Start-Process -FilePath $comspec -ArgumentList '/c', ('start \"\" \"' + $ExePath + '\"') -WorkingDirectory $exeDir -WindowStyle Hidden -ErrorAction Stop",
+    "    Log 'DSH launch issued (detached via cmd start)'",
+    // v1.1.7：Start-Process 返回成功不代表窗口真的起来了（旧版正是在这里静默失败）。
+    // 等 4 秒再查一次主进程：确认 GUI 真的存活，而不是起来就死。
+    "    Start-Sleep -Seconds 4",
+    "    $born = @(Get-CimInstance Win32_Process -Filter \"Name='DeepSeek Harness.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $ExePath) -and ($_.CommandLine -notmatch '--type=') })",
+    "    if ($born.Count -gt 0) {",
+    "      Log ('launch verified: main proc alive=' + $born.Count + ' pid=' + ($born[0].ProcessId))",
+    "      Stamp ('ok; restoredAsar=' + $restored + '; appDirExists=' + (Test-Path -LiteralPath $AppDir) + '; dshLaunched=True')",
+    "    } else {",
+    "      Log 'WARN: no main process 4s after launch; window probably did not appear'",
+    "      Stamp ('warn; restored=True but no DSH main process after launch')",
+    "    }",
+    "  } catch {",
+    "    Log ('ERROR: failed to launch DSH: ' + $_.Exception.Message)",
+    "    Stamp ('warn; restored=True but launch failed: ' + $_.Exception.Message)",
+    "  }",
+    "  exit 0",
+    "}",
+    "Log 'timeout after 45 minutes'",
+    "Stamp 'timeout'",
+    "Unlock",
+  ].join("\r\n");
+  // v1.1.5：生成前先在 Node 侧校验关键路径，避免把空串写进脚本。
+  // 旧版正是因为 $BakPath 为空导致还原分支被静默跳过（实测 23:02 那次）。
+  if (!asar || !bak || !appDir) return false;
+  if (!existsSync(asar) && !existsSync(bak)) return false;
+  try {
+    writeFileSync(script, ps, "utf8");
+    // 清掉上一次的结果标记，避免重启后回读到旧结论
+    rmSync(stamp, { force: true });
+  } catch {
+    return false;
+  }
+  // 去重：已有活着的还原脚本就不再起新的（否则多个脚本抢删/抢改名）
+  if (revertScriptAlive()) return true;
+  try {
+    writeFileSync(lock, `${Date.now()}\n`, "utf8");
+  } catch {
+    /* 锁写失败不阻断，脚本自身幂等 */
+  }
+  // 同改名脚本：必须用参数数组喂给 cmd.exe，否则 start 静默失败。
+  const pArgs = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script];
+  const startArgs = ["/c", "start", "", "/min", "powershell.exe", ...pArgs];
+  try {
+    const child = spawnDetached("cmd.exe", startArgs, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      shell: false,
+    });
+    child.on("error", () => {
+      /* 启动失败由上层判定 */
+    });
+    child.unref();
+    return true;
+  } catch {
+    // 退回直接 spawn
+    try {
+      const child = spawnDetached(
+        "powershell.exe",
+        pArgs,
+        { detached: true, stdio: "ignore", windowsHide: true, shell: false },
+      );
+      child.on("error", () => {});
+      child.unref();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * 读回「退出后还原脚本」的结论（v1.1.5）。
+ * 脚本在开始/成功/失败/取消时写 genn-revert-on-exit.result，
+ * 宿主重启后读它就能知道上一次还原到底做成了没有——旧版完全没有这个反馈通道。
+ */
+function readRevertResult() {
+  try {
+    const stamp = join(homedir(), "AppData", "Local", "Temp", "genn-revert-on-exit.result");
+    if (!existsSync(stamp)) return null;
+    const stat = statSync(stamp);
+    // 只关心最近 30 分钟内的结论，更早的视为历史残留
+    if (Date.now() - stat.mtimeMs > 30 * 60 * 1000) return null;
+    const text = readFileSync(stamp, "utf8").trim();
+    return { verdict: text, at: new Date(stat.mtimeMs).toISOString() };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 是否真有「等退出后还原」的脚本在跑（v1.1.4）。
+ * 与 renameScriptAlive 同构：必须排除查询进程自身，否则恒真。
+ */
+function revertScriptAlive() {
+  try {
+    const script = [
+      "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+      "$self = $PID",
+      "$hit = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |",
+      "  Where-Object { $_.Name -match '^powershell\\.exe$' -and $_.ProcessId -ne $self -and $_.CommandLine -and $_.CommandLine -match 'genn-revert-on-exit' })",
+      "if ($hit.Count -gt 0) { 'ALIVE' } else { 'DEAD' }",
+    ].join("\n");
+    const out = execFileSync("powershell.exe", ["-NoProfile", "-Command", script], {
+      encoding: "utf8",
+      timeout: 4000,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return String(out || "").toUpperCase().includes("ALIVE");
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// 后台执行器：解包 2 万个文件是同步 IO，会阻塞 1~3 分钟。
+// 直接放在 HTTP 路由里会让 fetch 超时、界面像卡死。所以：
+//   路由立刻返回 {ok, started}，前端每 2 秒拉 /genn/armor 读 progress。
+// 同时用 running 标志防止重复点击并发执行（两个解包同时跑会互相覆盖）。
+// ============================================================================
+const SEALED_TASK = { running: false, action: null, result: null };
+
+function runSealedTask(action, core) {
+  if (SEALED_TASK.running) {
+    return { started: false, busy: true, action: SEALED_TASK.action };
+  }
+  SEALED_TASK.running = true;
+  SEALED_TASK.action = action;
+  SEALED_TASK.result = null;
+  SEALED_INFO.startedAt = Date.now();
+  SEALED_INFO.finishedAt = 0;
+  // 用 setImmediate 让路由先写回响应，再开始长任务。
+  setImmediate(() => {
+    const run = action === "revert" ? sealedRevert : sealedApply;
+    Promise.resolve()
+      .then(() => run(core))
+      .then((out) => {
+        SEALED_TASK.result = out;
+        if (!out || out.ok !== true) {
+          // 失败时 stage 已由内部函数设置；这里兜底，避免 UI 一直转圈。
+          if (SEALED_INFO.stage !== "error") {
+            setSealedStage("error", (out && out.error) || "未完成");
+          }
+        }
+      })
+      .catch((e) => {
+        const msg = String((e && e.message) || e);
+        SEALED_TASK.result = { ok: false, error: msg };
+        setSealedStage("error", msg);
+      })
+      .finally(() => {
+        SEALED_TASK.running = false;
+        SEALED_TASK.action = null;
+      });
+  });
+  return { started: true, action };
+}
+
 const normalizeStats = {
   steps: 0,
   changed: 0,
@@ -765,10 +1523,13 @@ function registerScopeRoute(ctx, config) {
   };
   const armorAction = async (req, res, action) => {
     try {
-      const out = action === "revert"
-        ? await patchRevertAll(patchCore)
-        : await patchApplyAll(patchCore);
-      send(res, 200, Object.assign({ ok: true }, out));
+      // 长任务（解包 2 万文件 / 删 2 万文件）放后台，路由立即返回，
+      // 否则 fetch 会等到超时、界面看起来像卡死。前端轮询 GET 读 progress。
+      const started = runSealedTask(action, patchCore);
+      if (!started.started) {
+        return send(res, 409, { ok: false, busy: true, error: "已有任务在执行中，请等待完成", progress: { ...SEALED_INFO } });
+      }
+      send(res, 200, { ok: true, started: true, action, progress: { ...SEALED_INFO } });
     } catch (e) {
       send(res, 500, { ok: false, error: String((e && e.message) || e) });
     }

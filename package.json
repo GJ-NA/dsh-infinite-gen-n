@@ -1,6 +1,6 @@
 {
   "name": "dsh-infinite-gen-n",
-  "version": "1.1.0",
+  "version": "1.1.10",
   "description": "DeepSeek Harness 破甲插件「无限N代」：N1 破甲提示词（A/B 实测 100%）+ 输入归一化 + 冷启动预热 + 多轮重锚 + 宿主清洗引擎。把「破甲模式」注册为可选 agent preset，追加 N1 交付引擎系统提示、输入归一化、长输出落盘纪律与工作提醒顾问；未选中预设的会话零注入。",
   "type": "module",
   "main": "index.js",
@@ -28,7 +28,7 @@
     "dump.js",
     "tools"
   ],
-    "scripts": {
+  "scripts": {
     "harness:check": "node --check index.js && node --check client.js && node --check preheat.js && node --check normalize.js && node --check dump.js && node --check armor-rules.js && node tools/run_prompt_bank.mjs --lint"
   },
   "keywords": [
@@ -56,7 +56,7 @@
     "manifestVersion": 1,
     "id": "dsh-infinite-gen-n",
     "name": "无限N代",
-    "version": "1.1.0",
+    "version": "1.1.10",
     "repo": "https://github.com/Minglink/dsh-infinite-gen-n",
     "permissions": "系统提示词注入（仅 armor 预设）, 客户端状态条, 会话投影, 工作提醒顾问",
     "client": {
